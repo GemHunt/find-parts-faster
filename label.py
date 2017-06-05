@@ -1,5 +1,3 @@
-#This is just used to see the webcam output
-
 import time
 import cv2
 import zbar
@@ -7,22 +5,27 @@ import Image
 import numpy as np
 import pyqrcode
 import glob
+import os
 import random
 import pickle
+import serial
+import local_dir as dir
 
-dir = "/home/pkrush/find-parts-faster/"
-output_width = 960
-output_height = 540
-background_width = 1280
-background_height = 720
+output_width = 480
+output_height = 270
+background_width = 640
+background_height = 360
 padding = 20
-qr_scale = 8
+qr_scale = 4
 qr_unscaled_size = 21  # version 1
 qr_size = qr_unscaled_size * qr_scale
+qr_padded_size = qr_unscaled_size * qr_scale + padding * 2
 x_qr_interval = background_width - (padding * 2) - qr_size
 y_qr_interval = background_height - (padding * 2) - qr_size
 yes_points = []
 no_points = []
+mouse_pointer = (100,100)
+crop_radius = 21
 
 
 def get_qr_code(data,scale):
@@ -37,98 +40,50 @@ def get_qr_code(data,scale):
 def mark(event, x, y, flags, param):
     global yes_points
     global no_points
+    global mouse_pointer
 
     if event == cv2.EVENT_LBUTTONDOWN:
         yes_points.append((x, y))
     if event == cv2.EVENT_RBUTTONDOWN:
         no_points.append((x, y))
 
-def get_points_inside_border(points,border):
+    if event == cv2.EVENT_MOUSEMOVE:
+        mouse_pointer = (x,y)
+
+def get_points_inside_border(points):
     new_points = []
     for x,y in points:
-        if x < border:
-            continue
-        if x > output_width - border:
-            continue
-        if y < border:
-            continue
-        if y > output_height - border:
-            continue
-        new_points.append((x,y))
+        if is_point_inside_border(x,y):
+            new_points.append((x, y))
     return new_points
 
-def label_warped():
-    cv2.namedWindow("Warped")
-    cv2.setMouseCallback("Warped", mark)
-    global yes_points
-    global no_points
-
-    yes_points = pickle.load(open(dir + 'yes_points.pickle', "rb"))
-    no_points = pickle.load(open(dir + 'no_points.pickle', "rb"))
-
-    warped_filenames = []
-    for filename in glob.iglob(dir + 'warped/' + '*.png'):
-        #crops.append([random.random(), filename])
-        warped_filenames.append(filename)
-    warped_filenames.sort()
-    loop = True
-    while loop:
-        for filename in warped_filenames:
-            yes_points = get_points_inside_border(yes_points, 28)
-            no_points = get_points_inside_border(no_points, 28)
-
-            warped = cv2.imread(filename)
-            for marked_point in yes_points:
-                cv2.circle(warped,marked_point, 28, (255, 255,255), 1)
-            for marked_point in no_points:
-                cv2.circle(warped,marked_point, 28, (0,0,0), 1)
-
-            font = cv2.FONT_HERSHEY_SIMPLEX
-            cv2.putText(warped, 'Yes:' + str(len(yes_points)) + ' No:' + str(len(no_points)) , (4, 20), font, .7, (0, 255, 0), 2)
-            cv2.imshow("Warped", warped)
-            if cv2.waitKey(4) & 0xFF == ord('q'):
-                loop = False
-                break
-    pickle.dump(yes_points, open(dir + 'yes_points.pickle', "wb"))
-    pickle.dump(no_points, open(dir + 'no_points.pickle', "wb"))
-
+def is_point_inside_border(x,y):
+    if x < crop_radius:
+        return False
+    if x > output_width - crop_radius:
+        return False
+    if y < crop_radius:
+        return False
+    if y > output_height - crop_radius:
+        return False
+    return True
 
 def save_crops(warped, points,filename_start):
     for x, y in points:
-        crop0 = warped[y - 28:y + 28, x - 28:x + 28]
-        crop = crop0.copy()
-        angle = random.random() * 360
-        m = cv2.getRotationMatrix2D((28, 28), angle, 1)
-        cv2.warpAffine(crop, m, (56, 56), crop, cv2.INTER_CUBIC)
-        crop_filename = filename_start + 'id' + str(x).zfill(4) + 'x' + str(y).zfill(4) + 'y' + '.png'
-        cv2.imwrite(crop_filename, crop)
+        pixels_to_jitter = 4  # Old Way
+        jitter_x = x + (random.random() * pixels_to_jitter * 2) - pixels_to_jitter
+        jitter_y = y + (random.random() * pixels_to_jitter * 2) - pixels_to_jitter
+        if is_point_inside_border(jitter_x, jitter_y):
+            crop0 = warped[jitter_y - crop_radius:jitter_y + crop_radius, jitter_x - crop_radius:jitter_x + crop_radius]
+            crop = crop0.copy()
+            angle = random.random() * 360
+            m = cv2.getRotationMatrix2D((crop_radius, crop_radius), angle, 1)
+            cv2.warpAffine(crop, m, (crop_radius * 2, crop_radius * 2), crop, cv2.INTER_CUBIC)
+            crop_filename = filename_start + 'id' + str(x).zfill(4) + 'x' + str(y).zfill(4) + 'y' + '.png'
+            cv2.imwrite(crop_filename, crop)
 
 
-def fill_train_dir():
-    global yes_points
-    global no_points
-
-    yes_points = pickle.load(open(dir + 'yes_points.pickle', "rb"))
-    no_points = pickle.load(open(dir + 'no_points.pickle', "rb"))
-
-    warped_filenames = []
-    for filename in glob.iglob(dir + 'warped/' + '*.png'):
-        #crops.append([random.random(), filename])
-        warped_filenames.append(filename)
-        warped_filenames.sort()
-
-    for filename in warped_filenames:
-        warped = cv2.imread(filename)
-        warped = cv2.cvtColor(warped, cv2.COLOR_BGR2GRAY)
-        warped_id = str(filename).replace('.png','')
-        warped_id = warped_id[(len(warped_id)-5):] #last 5 is ID
-
-        filename_start = dir + 'train/yes/'+  warped_id
-        save_crops(warped, yes_points,filename_start)
-        filename_start = dir + 'train/no/' + warped_id
-        save_crops(warped, no_points, filename_start)
-
-def display_background():
+def get_background(backlight):
     background = np.zeros((background_height,background_width), dtype=np.uint8)
     background = background + 255
 
@@ -139,15 +94,29 @@ def display_background():
             qr_x = x * x_qr_interval + padding
             qr_y = y * y_qr_interval + padding
             background[qr_y:qr_y + qr_size,qr_x:qr_x + qr_size] = qr_code
-    while True:
-        cv2.imshow("background", background)
 
-        if cv2.waitKey(1) & 0xFF == ord('q'):
-            break
+    if not backlight:
+        background[0:background_height, qr_padded_size:background_width-qr_padded_size] = 0
+        background[qr_padded_size:background_height - qr_padded_size, 0:background_width] = 0
+
+    return background
+
+def rotate_led():
+    ser = serial.Serial(port='/dev/ttyUSB1', baudrate=115200)
+    cv2.waitKey(1)
+    while True:
+        for backlight_on in [True, False]:
+            background = get_background(backlight_on)
+            for count in range(0, 48):
+                cv2.imshow("Background", background)
+                if cv2.waitKey(1) & 0xFF == ord('q'):
+                    break
+                ser.write(str(count) + "\n")
+                cv2.waitKey(66)
 
 def process_video():
     #cap = cv2.VideoCapture(0)
-    cap = cv2.VideoCapture(dir + "1.mp4")
+    cap = cv2.VideoCapture(dir.data + "0.mp4")
     #cap.set(3,1920)
     #cap.set(4,1080)
 
@@ -239,7 +208,7 @@ def process_video():
                 M = cv2.getPerspectiveTransform(max_src, max_dst)
                 warped = cv2.warpPerspective(output, M, (background_width-(padding*2),background_height-(padding*2)))
                 warped = cv2.resize(warped, (output_width, output_height), interpolation=cv2.INTER_AREA)
-                cv2.imwrite(dir + 'warped/' + str(count).zfill(5) + '.png', warped)
+                cv2.imwrite(dir.warped + str(count).zfill(5) + '.png', warped)
                 cv2.imshow("warped", warped)
 
         output = cv2.resize(output, (output_width, output_height), interpolation=cv2.INTER_AREA)
@@ -253,7 +222,72 @@ def process_video():
     cap.release()
     cv2.destroyAllWindows()
 
-#display_background()
+def label_warped():
+    cv2.namedWindow("Warped")
+    cv2.setMouseCallback("Warped", mark)
+    global yes_points
+    global no_points
+
+    if os.path.exists(dir.data + 'yes_points.pickle'):
+        yes_points = pickle.load(open(dir.data + 'yes_points.pickle', "rb"))
+    if os.path.exists(dir.data + 'no_points.pickle'):
+        no_points = pickle.load(open(dir.data + 'no_points.pickle', "rb"))
+
+    warped_filenames = []
+    for filename in glob.iglob(dir.data + 'warped/' + '*.png'):
+        #crops.append([random.random(), filename])
+        warped_filenames.append(filename)
+    warped_filenames.sort()
+    loop = True
+    while loop:
+        for filename in warped_filenames:
+            yes_points = get_points_inside_border(yes_points )
+            no_points = get_points_inside_border(no_points )
+
+            warped = cv2.imread(filename)
+            cv2.circle(warped,mouse_pointer, crop_radius, (0,255,0), 1)
+
+            for marked_point in yes_points:
+                cv2.circle(warped,marked_point, crop_radius, (255, 255,255), 1)
+            for marked_point in no_points:
+                cv2.circle(warped,marked_point, crop_radius, (0,0,0), 1)
+
+
+            font = cv2.FONT_HERSHEY_SIMPLEX
+            cv2.putText(warped, 'Yes:' + str(len(yes_points)) + ' No:' + str(len(no_points)) , (4, 20), font, .7, (0, 255, 0), 2)
+            cv2.imshow("Warped", warped)
+            if cv2.waitKey(33) & 0xFF == ord('q'):
+                loop = False
+                break
+    pickle.dump(yes_points, open(dir.data + 'yes_points.pickle', "wb"))
+    pickle.dump(no_points, open(dir.data + 'no_points.pickle', "wb"))
+
+
+def fill_train_dir():
+    global yes_points
+    global no_points
+
+    yes_points = pickle.load(open(dir.data + 'yes_points.pickle', "rb"))
+    no_points = pickle.load(open(dir.data + 'no_points.pickle', "rb"))
+
+    warped_filenames = []
+    for filename in glob.iglob(dir.warped + '*.png'):
+        #crops.append([random.random(), filename])
+        warped_filenames.append(filename)
+        warped_filenames.sort()
+
+    for filename in warped_filenames:
+        warped = cv2.imread(filename)
+        warped = cv2.cvtColor(warped, cv2.COLOR_BGR2GRAY)
+        warped_id = str(filename).replace('.png','')
+        warped_id = warped_id[(len(warped_id)-5):] #last 5 is ID
+        filename_start = dir.yes +  warped_id
+        save_crops(warped, yes_points,filename_start)
+        filename_start = dir.no + warped_id
+        save_crops(warped, no_points, filename_start)
+
+#dir.init_directories()
+#rotate_led()
 #process_video()
 #label_warped()
 fill_train_dir()

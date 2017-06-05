@@ -8,11 +8,10 @@ import time
 sys.path.append('/home/pkrush/caffe/python')
 import caffe
 
-def get_classifier(model_name, crop_size):
-    model_dir = model_name + '/'
-    MODEL_FILE = model_dir + 'deploy.prototxt'
-    PRETRAINED = model_dir + 'snapshot.caffemodel'
-    meanFile = model_dir + 'mean.binaryproto'
+def get_classifier(crop_size):
+    MODEL_FILE = dir.model + 'deploy.prototxt'
+    PRETRAINED = dir.model + 'snapshot.caffemodel'
+    meanFile = dir.model + 'mean.binaryproto'
 
     # Open mean.binaryproto file
     blob = caffe.proto.caffe_pb2.BlobProto()
@@ -25,14 +24,9 @@ def get_classifier(model_name, crop_size):
     return net
 
 def get_labels(model_name):
-    labels_file = model_name + '/labels.txt'
+    labels_file = dir.model + 'labels.txt'
     labels = [line.rstrip('\n') for line in open(labels_file)]
     return labels
-
-def make_dir(directories):
-    for path_name in directories:
-        if not os.path.exists(path_name):
-            os.makedirs(path_name)
 
 def get_caffe_image(crop, crop_size):
     # this is how you get the image from file:
@@ -60,76 +54,68 @@ def get_composite_image(images, rows, cols):
                 composite_image[x * crop_rows:((x + 1) * crop_rows), y * crop_cols:((y + 1) * crop_cols)] = images[key]
     return composite_image
 
-start_time = time.time()
-crop_size = 28
-heads_tails = get_classifier("heads_tails_model", crop_size)
-heads_tails_labels = get_labels('heads_tails_model')
-count = 0
+def infer_dir(dir_to_infer):
+    start_time = time.time()
+    crop_size = 28
+    model = get_classifier(crop_size)
+    model_labels = get_labels('model')
+    count = 0
 
-image_ids = []
+    scores = {}
+    for root, dirnames, walk_filenames in os.walk(dir_to_infer):
+        for filename in walk_filenames:
+            point = filename[7:17]
 
-for root, dirnames, walk_filenames in os.walk(dir.crop_crop):
-    for filename in walk_filenames:
-        if filename.endswith('.png'):
-            image_id = int(filename.replace('.png', ''))
-            image_ids.append([image_id, root, filename])
+            crop = cv2.imread(root + '/' + filename)
+            if crop is None:
+                continue
+            crop = cv2.cvtColor(crop, cv2.COLOR_BGR2GRAY)
+            score = model.predict(get_caffe_image(crop, crop_size), oversample=False)
+            if point in scores.iterkeys():
+                scores[point] = scores[point] + score
+            else:
+                scores[point] = score
 
-image_ids = sorted(image_ids)
-coin_scores = {}
-thumbnails = {}
+            coin_type = model_labels[np.argmax(score)]
+            max_value = np.amax(score)
+            count +=1
+            if count % 400 == 0 and count != 0:
+                for key, score in scores.iteritems():
+                    print score[0][0]/(score[0][0] +score[0][1])
+                print "Next"
 
-for image_id, root, filename in image_ids:
-    coin_id = image_id / 100
-    crop = cv2.imread(root + '/' + filename)
-    if crop is None:
-        continue
-    if image_id % 100 == 54:
-        thumbnail_filename = dir.small_crop + filename
-        thumbnail = cv2.imread(thumbnail_filename)
-        if thumbnail is not None:
-            thumbnails[coin_id] = thumbnail
-    crop = cv2.cvtColor(crop, cv2.COLOR_BGR2GRAY)
-    score = heads_tails.predict(get_caffe_image(crop, crop_size), oversample=False)
-    if coin_id in coin_scores.iterkeys():
-        coin_scores[coin_id] = coin_scores[coin_id] + score
-    else:
-        coin_scores[coin_id] = score
+    print 'Done in %s seconds' % (time.time() - start_time,)
 
-    coin_type = heads_tails_labels[np.argmax(score)]
-    max_value = np.amax(score)
+def create_heat_map(filename):
+    start_time = time.time()
+    crop_radius = 21
+    model = get_classifier(28)
+    model_labels = get_labels('model')
+    count = 0
+    scores = {}
 
-    print image_id, coin_type, score, max_value
+    test_image = cv2.imread(filename)
+    cols = test_image.shape[0]
+    rows = test_image.shape[1]
 
-results = []
+    heatmap = np.zeros((cols,rows), dtype=np.uint8)
 
-for coin_id, score in coin_scores.iteritems():
-    coin_type = heads_tails_labels[np.argmax(score)]
-    # There are 57 images and 100/57 is needed to take it to 100%
-    max_value = np.amax(score) * 100 / 57
-    results.append([coin_id, coin_type, max_value])
 
-results = sorted(results, key=lambda result: result[2], reverse=True)
-results = sorted(results, key=lambda result: result[1], reverse=True)
-images = []
+    for x in range(0,rows - crop_radius * 2):
+        for y in range(0, cols - crop_radius * 2):
+            test_crop = test_image[y:y+(crop_radius * 2),x:x+(crop_radius * 2)]
+            crop = cv2.cvtColor(test_crop, cv2.COLOR_BGR2GRAY)
+            crop = cv2.resize(crop, (28,28), interpolation=cv2.INTER_AREA)
+            score = model.predict(get_caffe_image(crop, 28), oversample=False)
+            heatmap[y+crop_radius,x+crop_radius] = int(score[0][0] * 255)
+        print x,y
 
-for coin_id, coin_type, max_value in results:
-    if coin_id not in thumbnails.iterkeys():
-        print coin_id, 'coin_id not in thumbnails.iterkeys():'
-        continue
-    crop = thumbnails[coin_id]
-    font = cv2.FONT_HERSHEY_SIMPLEX
-    cv2.putText(crop, str(int(max_value)), (4, 15), font, .5, (0, 200, 0), 2)
-    # cv2.putText(crop, str(coin_id), (4, 40), font, .4, (0, 255, 0), 2)
-    images.append(crop)
+    cv2.imwrite(dir.data + 'heatmap.png',heatmap)
+    print 'Done in %s seconds' % (time.time() - start_time,)
 
-composite = get_composite_image(images, 50, 20)
-# cv2.namedWindow("results")
-cv2.imwrite(dir.labeled_crop + 'results.png', composite)
+#infer_dir(dir.no)
+create_heat_map(dir.warped + '00006.png')
 
-# while True:
-#     cv2.imshow("results",composite)
-#     key = cv2.waitKey(1) & 0xFFshutil
-#     if key == ord("q"):
-#         break
-print 'Done in %s seconds' % (time.time() - start_time,)
-cv2.destroyAllWindows()
+
+
+
