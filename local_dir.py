@@ -2,7 +2,7 @@ import os
 data = "/home/pkrush/find-parts-faster-data/3/"
 yes = "/home/pkrush/find-parts-faster-data/3/train/yes/"
 no =  "/home/pkrush/find-parts-faster-data/3/train/no/"
-model = "/home/pkrush/find-parts-faster-data/3/model/"
+model = "/home/pkrush/find-parts-faster-data/3_10x/model/"
 warped = "/home/pkrush/find-parts-faster-data/3/warped/"
 
 

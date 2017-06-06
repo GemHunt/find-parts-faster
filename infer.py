@@ -1,9 +1,12 @@
 import numpy as np
 import os
+import random
 import sys
-import cv2
-import local_dir as dir
 import time
+
+import cv2
+
+import local_dir as dir
 
 sys.path.append('/home/pkrush/caffe/python')
 import caffe
@@ -100,11 +103,15 @@ def create_heat_map(filename):
 
     heatmap = np.zeros((cols,rows), dtype=np.uint8)
 
-
     for x in range(0,rows - crop_radius * 2):
         for y in range(0, cols - crop_radius * 2):
             test_crop = test_image[y:y+(crop_radius * 2),x:x+(crop_radius * 2)]
-            crop = cv2.cvtColor(test_crop, cv2.COLOR_BGR2GRAY)
+            crop0 = cv2.cvtColor(test_crop, cv2.COLOR_BGR2GRAY)
+            crop = crop0.copy()
+            angle = random.random() * 360
+            m = cv2.getRotationMatrix2D((crop_radius, crop_radius), angle, 1)
+            cv2.warpAffine(crop, m, (crop_radius * 2, crop_radius * 2), crop, cv2.INTER_CUBIC)
+
             crop = cv2.resize(crop, (28,28), interpolation=cv2.INTER_AREA)
             score = model.predict(get_caffe_image(crop, 28), oversample=False)
             heatmap[y+crop_radius,x+crop_radius] = int(score[0][0] * 255)
