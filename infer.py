@@ -103,8 +103,8 @@ def create_heat_map(filename):
 
     heatmap = np.zeros((cols,rows), dtype=np.uint8)
 
-    for x in range(0,rows - crop_radius * 2):
-        for y in range(0, cols - crop_radius * 2):
+    for x in range(0, rows - crop_radius * 2, 9):
+        for y in range(0, cols - crop_radius * 2, 9):
             test_crop = test_image[y:y+(crop_radius * 2),x:x+(crop_radius * 2)]
             crop0 = cv2.cvtColor(test_crop, cv2.COLOR_BGR2GRAY)
             crop = crop0.copy()
@@ -121,8 +121,4 @@ def create_heat_map(filename):
     print 'Done in %s seconds' % (time.time() - start_time,)
 
 #infer_dir(dir.no)
-create_heat_map(dir.warped + '00006.png')
-
-
-
-
+# create_heat_map(dir.warped + '00006.png')

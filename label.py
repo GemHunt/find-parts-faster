@@ -76,12 +76,22 @@ def save_crops(warped, points,filename_start):
                 crop0 = warped[jitter_y - crop_radius:jitter_y + crop_radius,
                         jitter_x - crop_radius:jitter_x + crop_radius]
                 crop = crop0.copy()
+
+                mirror = random.random()
+                if mirror > .5:
+                    mirrored_crop = np.zeros((crop_radius * 2, crop_radius * 2), dtype=np.uint8)
+                    cv2.flip(crop, 1, mirrored_crop)
+                    crop = mirrored_crop
+
+
                 angle = random.random() * 360
                 m = cv2.getRotationMatrix2D((crop_radius, crop_radius), angle, 1)
                 cv2.warpAffine(crop, m, (crop_radius * 2, crop_radius * 2), crop, cv2.INTER_CUBIC)
                 crop_filename = filename_start + 'id' + str(jitter_x).zfill(4) + 'x' + str(jitter_y).zfill(
                     4) + 'y' + '.png'
+
                 cv2.imwrite(crop_filename, crop)
+
 
 def get_background(backlight):
     background = np.zeros((background_height,background_width), dtype=np.uint8)
@@ -274,7 +284,7 @@ def fill_train_dir():
         save_crops(warped, yes_points,filename_start)
         filename_start = dir.no + warped_id
         random_no_points = []
-        while len(random_no_points) < augmentation_factor * len(yes_points):
+        while len(random_no_points) < len(yes_points):
             output_width = 480
             output_height = 270
             x = random.randrange(crop_radius, output_width - crop_radius)
@@ -288,8 +298,14 @@ def fill_train_dir():
                 # todo if not in the QR code area
         save_crops(warped, random_no_points, filename_start)
 
-#dir.init_directories()
+
+dir.init_directories()
 #rotate_led()
 #process_video()
 #label_warped()
 fill_train_dir()
+
+# 4:Tray: No LED lighting.
+# 5:Tray: No LED lighting: Flashlight (blurry, needs top light)
+# 6:
+# 7:

@@ -1,9 +1,12 @@
 import os
-data = "/home/pkrush/find-parts-faster-data/3/"
-yes = "/home/pkrush/find-parts-faster-data/3/train/yes/"
-no =  "/home/pkrush/find-parts-faster-data/3/train/no/"
-model = "/home/pkrush/find-parts-faster-data/3_10x/model/"
-warped = "/home/pkrush/find-parts-faster-data/3/warped/"
+
+test_id = '2'
+data = "/home/pkrush/find-parts-faster-data/" + test_id + "/"
+yes = "/home/pkrush/find-parts-faster-data/" + test_id + "/train/yes/"
+no = "/home/pkrush/find-parts-faster-data/" + test_id + "/train/no/"
+model = "/home/pkrush/find-parts-faster-data/" + test_id + "/model/"
+warped = "/home/pkrush/find-parts-faster-data/" + test_id + "/warped/"
+train = "/home/pkrush/find-parts-faster-data/" + test_id + "/train/"
 
 
 def make_dir(directory):
