@@ -8,10 +8,9 @@ import lmdb
 from caffe.proto import caffe_pb2
 
 import caffe_lmdb
-import local_dir as dir
 
 
-def create_lmdb(image_to_window, lmdb_dir, label):
+def create_lmdb(image_to_window, lmdb_dir, label, step_size):
     start_time = time.time()
     crop_radius = 21
 
@@ -30,8 +29,8 @@ def create_lmdb(image_to_window, lmdb_dir, label):
     cols = image_to_window.shape[0]
     rows = image_to_window.shape[1]
 
-    for x in range(0, rows - crop_radius * 2, 3):
-        for y in range(0, cols - crop_radius * 2, 3):
+    for x in range(0, rows - crop_radius * 2, step_size):
+        for y in range(0, cols - crop_radius * 2, step_size):
             test_crop = image_to_window[y:y + (crop_radius * 2), x:x + (crop_radius * 2)]
             crop0 = cv2.cvtColor(test_crop, cv2.COLOR_BGR2GRAY)
             crop = crop0.copy()
@@ -55,7 +54,3 @@ def create_lmdb(image_to_window, lmdb_dir, label):
 
     print lmdb_dir, 'Done after %s seconds' % (time.time() - start_time,)
     return
-
-
-image_to_window = cv2.imread(dir.warped + '00005.png')
-create_lmdb(image_to_window, dir.train, 0)

@@ -1,11 +1,14 @@
 import numpy as np
 import os
 import random
+import subprocess
 import sys
 import time
 
 import cv2
+import pandas as pd
 
+import create_lmdb
 import local_dir as dir
 
 sys.path.append('/home/pkrush/caffe/python')
@@ -40,7 +43,6 @@ def get_caffe_image(crop, crop_size):
     caffe_image = np.array(caffe_image).reshape(crop_size, crop_size, 1)
     # Caffe wants a list so []:
     return [caffe_image]
-
 
 def get_composite_image(images, rows, cols):
     crop_rows, crop_cols, channels = images[0].shape
@@ -120,5 +122,52 @@ def create_heat_map(filename):
     cv2.imwrite(dir.data + 'heatmap.png',heatmap)
     print 'Done in %s seconds' % (time.time() - start_time,)
 
+
+def import_heat_map_data(filename, step_size):
+    start_time = time.time()
+    crop_radius = 21
+    test_image = cv2.imread(dir.warped + '00005.png')
+    cols = test_image.shape[0]
+    rows = test_image.shape[1]
+    heatmap = np.zeros((int(cols / step_size), int(rows / step_size)), dtype=np.uint8)
+    heatmap_rows, heatmap_cols = heatmap.shape
+
+    df = pd.read_csv(filename)
+    for index, row in df.iterrows():
+        x = int(row[0])
+        y = int(row[1])
+        score = row[3]
+        if score < .5:
+            continue
+        if row[2] == 'no':
+            score = 1 - score
+        heatmap_x = int((x + crop_radius) / step_size)
+        heatmap_y = int((y + crop_radius) / step_size)
+
+        print heatmap_x, heatmap_y
+
+        if heatmap_cols > heatmap_x and heatmap_rows > heatmap_y:
+            heatmap[heatmap_y, heatmap_x] = int(score * 255)
+
+    full_heatmap = cv2.resize(heatmap, (rows, cols), interpolation=cv2.INTER_LANCZOS4)
+
+    cv2.imwrite(dir.data + 'heatmap.png', full_heatmap)
+    print 'Done in %s seconds' % (time.time() - start_time,)
+
+
+start_time = time.time()
+step_size = 32  # .57sec
+step_size = 16  # .65sec
+step_size = 8  # .92sec
+step_size = 4  # 2.1sec
+step_size = 2  # 6.24sec
+
+image_to_window = cv2.imread(dir.warped + '00005.png')
+create_lmdb.create_lmdb(image_to_window, dir.train, 0, step_size)
+
+subprocess.call(dir.data + 'infer.sh')
+
 #infer_dir(dir.no)
 # create_heat_map(dir.warped + '00006.png')
+import_heat_map_data('/home/pkrush/find-parts-faster-data/2/train/0.dat', step_size)
+print 'Done in %s seconds' % (time.time() - start_time,)
