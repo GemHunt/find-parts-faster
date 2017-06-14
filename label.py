@@ -28,6 +28,8 @@ yes_points = []
 mouse_pointer = (100,100)
 crop_radius = 21
 augmentation_factor = 10
+last_symbols = None
+
 
 def get_qr_code(data,scale):
     qr = pyqrcode.create(data, error='H', version=1, mode='binary')
@@ -112,8 +114,9 @@ def get_background(backlight):
     return background
 
 
-def get_warped(src, scanner):
-    gray = cv2.cvtColor(src, cv2.COLOR_BGR2GRAY, dstCn=0)
+def get_warped(input, scanner):
+    global last_symbols
+    gray = cv2.cvtColor(input, cv2.COLOR_BGR2GRAY, dstCn=0)
 
     pil = Image.fromarray(gray)
     width, height = pil.size
@@ -126,65 +129,72 @@ def get_warped(src, scanner):
     # extract results
     print"                                             for symbol in image:" + str(len(image.symbols))
 
-    if len(image.symbols) == 4:
-        max_src = np.zeros((4, 2), dtype=np.float32)
-        max_dst = np.zeros((4, 2), dtype=np.float32)
-        for symbol in image:
-            # do something useful with results
-            if symbol.data in ["0,0", "1,0", "0,1", "1,1"]:
-                # print 'decoded', symbol.type, 'symbol', '"%s"' % symbol.data
-                loc = symbol.location
-                print symbol.data, loc
-                # cv2.line(output, loc[0], loc[1], (0, 0, 0))
-                # cv2.line(output, loc[1], loc[2], (0, 0, 0))
-                # cv2.line(output, loc[2], loc[3], (0, 0, 0))
-                # cv2.line(output, loc[3], loc[0], (0, 0, 0))
-                src = np.array(loc, dtype=np.float32)
-                rad = 3
-                # dst = np.float32(((240+rad,240-rad), (240+rad, 320-rad), (320+rad,320-rad), (320+rad,240-rad)))
+    if len(image.symbols) != 4:
+        if last_symbols is None:
+            return None
+        symbols = last_symbols
+    else:
+        symbols = image.symbols
+        last_symbols = image.symbols
 
-                offset_x = 0
-                offset_y = 0
+    max_src = np.zeros((4, 2), dtype=np.float32)
+    max_dst = np.zeros((4, 2), dtype=np.float32)
+    for symbol in symbols:
+        # do something useful with results
+        if symbol.data in ["0,0", "1,0", "0,1", "1,1"]:
+            # print 'decoded', symbol.type, 'symbol', '"%s"' % symbol.data
+            loc = symbol.location
+            print symbol.data, loc
+            # cv2.line(output, loc[0], loc[1], (0, 0, 0))
+            # cv2.line(output, loc[1], loc[2], (0, 0, 0))
+            # cv2.line(output, loc[2], loc[3], (0, 0, 0))
+            # cv2.line(output, loc[3], loc[0], (0, 0, 0))
+            src = np.array(loc, dtype=np.float32)
+            rad = 3
+            # dst = np.float32(((240+rad,240-rad), (240+rad, 320-rad), (320+rad,320-rad), (320+rad,240-rad)))
 
-                if symbol.data == "0,0":
-                    max_src[0] = loc[0]
-                    qr_code_x = 0
-                    qr_code_y = 0
+            offset_x = 0
+            offset_y = 0
 
-                if symbol.data == "0,1":
-                    max_src[1] = loc[1]
-                    qr_code_x = 0
-                    qr_code_y = 1
+            if symbol.data == "0,0":
+                max_src[0] = loc[0]
+                qr_code_x = 0
+                qr_code_y = 0
 
-                if symbol.data == "1,0":
-                    max_src[3] = loc[3]
-                    qr_code_x = 1
-                    qr_code_y = 0
+            if symbol.data == "0,1":
+                max_src[1] = loc[1]
+                qr_code_x = 0
+                qr_code_y = 1
 
-                if symbol.data == "1,1":
-                    max_src[2] = loc[2]
-                    qr_code_x = 1
-                    qr_code_y = 1
+            if symbol.data == "1,0":
+                max_src[3] = loc[3]
+                qr_code_x = 1
+                qr_code_y = 0
 
-                local_offset_x = offset_x + x_qr_interval * qr_code_x
-                local_offset_y = offset_y + y_qr_interval * qr_code_y
+            if symbol.data == "1,1":
+                max_src[2] = loc[2]
+                qr_code_x = 1
+                qr_code_y = 1
 
-                local_dst = np.zeros((4, 2), dtype=np.float32)
-                local_dst[0] = [local_offset_x, local_offset_y]
-                local_dst[1] = [local_offset_x, local_offset_y + qr_size]
-                local_dst[2] = [local_offset_x + qr_size, local_offset_y + qr_size]
-                local_dst[3] = [local_offset_x + qr_size, local_offset_y]
+            local_offset_x = offset_x + x_qr_interval * qr_code_x
+            local_offset_y = offset_y + y_qr_interval * qr_code_y
 
-            max_dst[0] = [offset_x, offset_y]
-            max_dst[1] = [offset_x, y_qr_interval + qr_size]
-            max_dst[2] = [x_qr_interval + qr_size, y_qr_interval + qr_size]
-            max_dst[3] = [x_qr_interval + qr_size, offset_y]
+            local_dst = np.zeros((4, 2), dtype=np.float32)
+            local_dst[0] = [local_offset_x, local_offset_y]
+            local_dst[1] = [local_offset_x, local_offset_y + qr_size]
+            local_dst[2] = [local_offset_x + qr_size, local_offset_y + qr_size]
+            local_dst[3] = [local_offset_x + qr_size, local_offset_y]
 
-            M = cv2.getPerspectiveTransform(max_src, max_dst)
-            warped = cv2.warpPerspective(src, M,
-                                         (background_width - (padding * 2), background_height - (padding * 2)))
-            warped = cv2.resize(warped, (output_width, output_height), interpolation=cv2.INTER_AREA)
-            return warped
+        max_dst[0] = [offset_x, offset_y]
+        max_dst[1] = [offset_x, y_qr_interval + qr_size]
+        max_dst[2] = [x_qr_interval + qr_size, y_qr_interval + qr_size]
+        max_dst[3] = [x_qr_interval + qr_size, offset_y]
+
+    M = cv2.getPerspectiveTransform(max_src, max_dst)
+    warped = cv2.warpPerspective(input, M,
+                                 (background_width - (padding * 2), background_height - (padding * 2)))
+    warped = cv2.resize(warped, (output_width, output_height), interpolation=cv2.INTER_AREA)
+    return warped
 
 
 def process_video():
@@ -305,8 +315,17 @@ def fill_train_dir():
         save_crops(warped, random_no_points, filename_start)
 
 
+def show_background(backlight):
+    while True:
+        background = get_background(backlight)
+        cv2.imshow("Background", background)
+        if cv2.waitKey(1) & 0xFF == ord('q'):
+            break
+
+# show_background(True)
+
 # dir.init_directories()
-rotate_led(False)
+#rotate_led(False)
 #process_video()
 #label_warped()
 #fill_train_dir()
@@ -315,3 +334,4 @@ rotate_led(False)
 # 5:Tray: No LED lighting: Flashlight (blurry, needs top light)
 # 6:
 # 7:
+

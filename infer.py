@@ -125,7 +125,7 @@ def create_heat_map(filename):
     print 'Done in %s seconds' % (time.time() - start_time,)
 
 
-def import_heat_map_data(filename, step_size):
+def get_heat_map(filename, step_size):
     start_time = time.time()
     crop_radius = 21
     test_image = cv2.imread(dir.warped + '00005.png')
@@ -146,45 +146,70 @@ def import_heat_map_data(filename, step_size):
         heatmap_x = int((x + crop_radius) / step_size)
         heatmap_y = int((y + crop_radius) / step_size)
 
-        print heatmap_x, heatmap_y
+        # print heatmap_x, heatmap_y
 
         if heatmap_cols > heatmap_x and heatmap_rows > heatmap_y:
             heatmap[heatmap_y, heatmap_x] = int(score * 255)
 
     full_heatmap = cv2.resize(heatmap, (rows, cols), interpolation=cv2.INTER_LANCZOS4)
-
-    cv2.imwrite(dir.data + 'heatmap.png', full_heatmap)
-    print 'Done in %s seconds' % (time.time() - start_time,)
+    return full_heatmap
 
 
 def get_next_image_from_phone():
-    base_dir = '/run/user/1000/gvfs/mtp:host=%5Busb%3A003%2C011%5D/Phone/DCIM/simple_interval_camera'
-    while True:
-        for root, dirnames, filenames in os.walk(base_dir):
-            for filename in filenames:
-                next_image = cv2.imread(filename)
-                os.remove(filename)
+    base_dir = '/run/user/1000/gvfs/mtp:host=%5Busb%3A003%2C015%5D/Phone/DCIM/simple_interval_camera/'
+    for root, dirnames, filenames in os.walk(base_dir):
+        for filename in filenames:
+            if filename.endswith('.jpg'):
+                full_filename = root + '/' + filename
+                temp_filename = dir.data + 'temp.jpg'
+                os.system('gvfs-move "' + full_filename + '" "' + temp_filename + '"')
+                next_image = cv2.imread(temp_filename)
+                print "Next Image Captured"
                 return next_image
+    return None
 
 
-start_time = time.time()
-step_size = 32  # .57sec
-step_size = 16  # .65sec
-step_size = 8  # .92sec
-step_size = 4  # 2.1sec
-step_size = 2  # 6.24sec
+def infer_from_camera():
+    step_size = 8
+    scanner = zbar.ImageScanner()
+    scanner.parse_config('enable')
+    loop = True
+    heat_map = None
+    while loop:
+        start_time = time.time()
 
-# image_to_window = cv2.imread(dir.warped + '00005.png')
-image_to_window = get_next_image_from_phone()
+        image_to_window = get_next_image_from_phone()
+        if image_to_window != None:
+            # cv2.imshow("image_to_window", image_to_window)
+            # if cv2.waitKey(0) & 0xFF == ord('q'):
+            #     break
 
-scanner = zbar.ImageScanner()
-scanner.parse_config('enable')
-warped = label.get_warped(image_to_window, scanner)
-create_lmdb.create_lmdb(image_to_window, dir.train, 0, step_size)
+            warped = label.get_warped(image_to_window, scanner)
+            if warped == None:
+                print 'QR codes not found on capture.'
+            else:
+                cv2.imshow("warped", warped)
+                if cv2.waitKey(1) & 0xFF == ord('q'):
+                    break
 
-subprocess.call(dir.data + 'infer.sh')
+                create_lmdb.create_lmdb(warped, dir.train, 0, step_size)
+                subprocess.call(dir.data + 'infer.sh')
+                heat_map = get_heat_map('/home/pkrush/find-parts-faster-data/2/train/0.dat', step_size)
 
+        if heat_map != None:
+            cv2.imshow("Heat Map", heat_map)
+            if cv2.waitKey(1) & 0xFF == ord('q'):
+                break
+
+        if cv2.waitKey(1) & 0xFF == ord('q'):
+            break
+        elapsed = time.time() - start_time
+        if elapsed > .1:
+            print 'Done in %s seconds' % (time.time() - start_time,)
+
+
+#start_time = time.time()
 #infer_dir(dir.no)
-# create_heat_map(dir.warped + '00006.png')
-import_heat_map_data('/home/pkrush/find-parts-faster-data/2/train/0.dat', step_size)
-print 'Done in %s seconds' % (time.time() - start_time,)
+# print 'Done in %s seconds' % (time.time() - start_time,)
+
+infer_from_camera()
