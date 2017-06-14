@@ -4,11 +4,13 @@ import random
 import subprocess
 import sys
 import time
+import zbar
 
 import cv2
 import pandas as pd
 
 import create_lmdb
+import label
 import local_dir as dir
 
 sys.path.append('/home/pkrush/caffe/python')
@@ -155,6 +157,16 @@ def import_heat_map_data(filename, step_size):
     print 'Done in %s seconds' % (time.time() - start_time,)
 
 
+def get_next_image_from_phone():
+    base_dir = '/run/user/1000/gvfs/mtp:host=%5Busb%3A003%2C011%5D/Phone/DCIM/simple_interval_camera'
+    while True:
+        for root, dirnames, filenames in os.walk(base_dir):
+            for filename in filenames:
+                next_image = cv2.imread(filename)
+                os.remove(filename)
+                return next_image
+
+
 start_time = time.time()
 step_size = 32  # .57sec
 step_size = 16  # .65sec
@@ -162,7 +174,12 @@ step_size = 8  # .92sec
 step_size = 4  # 2.1sec
 step_size = 2  # 6.24sec
 
-image_to_window = cv2.imread(dir.warped + '00005.png')
+# image_to_window = cv2.imread(dir.warped + '00005.png')
+image_to_window = get_next_image_from_phone()
+
+scanner = zbar.ImageScanner()
+scanner.parse_config('enable')
+warped = label.get_warped(image_to_window, scanner)
 create_lmdb.create_lmdb(image_to_window, dir.train, 0, step_size)
 
 subprocess.call(dir.data + 'infer.sh')
