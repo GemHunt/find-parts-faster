@@ -13,12 +13,14 @@ import pyqrcode
 
 import local_dir as dir
 
-output_width = 480
-output_height = 270
+#output_width = 480
+#output_height = 270
+output_width = 640
+output_height = 360
 background_width = 640
 background_height = 360
 padding = 20
-qr_scale = 4
+qr_scale = 6
 qr_unscaled_size = 21  # version 1
 qr_size = qr_unscaled_size * qr_scale
 qr_padded_size = qr_unscaled_size * qr_scale + padding * 2
@@ -145,7 +147,7 @@ def get_warped(input, scanner):
         if symbol.data in ["0,0", "1,0", "0,1", "1,1"]:
             # print 'decoded', symbol.type, 'symbol', '"%s"' % symbol.data
             loc = symbol.location
-            print symbol.data, loc
+            #print symbol.data, loc
             # cv2.line(output, loc[0], loc[1], (0, 0, 0))
             # cv2.line(output, loc[1], loc[2], (0, 0, 0))
             # cv2.line(output, loc[2], loc[3], (0, 0, 0))
@@ -317,13 +319,14 @@ def fill_train_dir():
 
 
 def show_background(backlight):
+    background = get_background(backlight)
     while True:
-        background = get_background(backlight)
         cv2.imshow("Background", background)
-        if cv2.waitKey(1) & 0xFF == ord('q'):
+        cv2.moveWindow("Background",210,30)
+        if cv2.waitKey(100) & 0xFF == ord('q'):
             break
 
-# show_background(True)
+#show_background(True)
 
 # dir.init_directories()
 #rotate_led(False)

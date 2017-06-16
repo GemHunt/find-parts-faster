@@ -52,5 +52,5 @@ def create_lmdb(image_to_window, lmdb_dir, label, step_size):
 
     train_image_db.close()
 
-    print lmdb_dir, 'Done after %s seconds' % (time.time() - start_time,)
+    #print lmdb_dir, 'Done after %s seconds' % (time.time() - start_time,)
     return

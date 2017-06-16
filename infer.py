@@ -91,7 +91,7 @@ def infer_dir(dir_to_infer):
                     print score[0][0]/(score[0][0] +score[0][1])
                 print "Next"
 
-    print 'Done in %s seconds' % (time.time() - start_time,)
+    #print 'Done in %s seconds' % (time.time() - start_time,)
 
 def create_heat_map(filename):
     start_time = time.time()
@@ -122,7 +122,7 @@ def create_heat_map(filename):
         print x,y
 
     cv2.imwrite(dir.data + 'heatmap.png',heatmap)
-    print 'Done in %s seconds' % (time.time() - start_time,)
+    #print 'Done in %s seconds' % (time.time() - start_time,)
 
 
 def get_heat_map(filename, step_size):
@@ -164,14 +164,18 @@ def get_next_image_from_phone():
     #         sys.exit()
 
     for root, dirnames, filenames in os.walk(dir.capture):
+        filenames.sort()
         for filename in filenames:
             if filename.endswith('.jpg'):
                 full_filename = root + '/' + filename
-                temp_filename = dir.data + 'temp.jpg'
-                os.system('gvfs-move "' + full_filename + '" "' + temp_filename + '"')
-                next_image = cv2.imread(temp_filename)
-                print "Next Image Captured"
-                return next_image
+                next_image = cv2.imread(full_filename,)
+                if next_image is None:
+                    #Wait for the file to download:
+                    cv2.waitKey(200)
+                else:
+                    #print "Next Image Captured"
+                    os.remove(full_filename)
+                    return next_image
     return None
 
 
@@ -181,26 +185,30 @@ def infer_from_camera():
     scanner.parse_config('enable')
     loop = True
     heat_map = None
-    background = label.get_background(True)
+    #background = label.get_background(True)
+    #cv2.imshow("Background", background)
+    #cv2.waitKey(1)
+    start_time = time.time()
+    window_x = 1670
+     = 30
+    window_y_spacing = label.output_height + 30
 
     while loop:
-        cv2.imshow("Background", background)
-        if cv2.waitKey(1) & 0xFF == ord('q'):
-            break
-
-        start_time = time.time()
-
         image_to_window = get_next_image_from_phone()
+
         if image_to_window != None:
-            # cv2.imshow("image_to_window", image_to_window)
-            # if cv2.waitKey(0) & 0xFF == ord('q'):
-            #     break
+            display_image = cv2.resize(image_to_window,(label.output_width,label.output_height), interpolation=cv2.INTER_AREA)
+            cv2.imshow("image_to_window", display_image)
+            cv2.moveWindow("image_to_window",window_x,window_y)
+            if cv2.waitKey(1) & 0xFF == ord('q'):
+                break
 
             warped = label.get_warped(image_to_window, scanner)
             if warped == None:
                 print 'QR codes not found on capture.'
             else:
                 cv2.imshow("warped", warped)
+                cv2.moveWindow("warped", window_x, window_y + window_y_spacing)
                 if cv2.waitKey(1) & 0xFF == ord('q'):
                     break
 
@@ -208,17 +216,15 @@ def infer_from_camera():
                 subprocess.call(dir.data + 'infer.sh')
                 heat_map = get_heat_map(dir.train + '0.dat', step_size)
 
-        if heat_map != None:
-            cv2.imshow("Background", heat_map)
-            if cv2.waitKey(1) & 0xFF == ord('q'):
-                break
+            if heat_map != None:
+                cv2.imshow("heat_map", heat_map)
+                cv2.moveWindow("heat_map", window_x,  window_y + (window_y_spacing * 2))
+                if cv2.waitKey(1) & 0xFF == ord('q'):
+                    break
+                print 'Done in %s seconds' % (time.time() - start_time,)
+                start_time = time.time()
 
-        if cv2.waitKey(1) & 0xFF == ord('q'):
-            break
-        elapsed = time.time() - start_time
-        cv2.waitKey(400)
-        if elapsed > .1:
-            print 'Done in %s seconds' % (time.time() - start_time,)
+
 
 
 #start_time = time.time()
