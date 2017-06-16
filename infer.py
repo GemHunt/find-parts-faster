@@ -128,9 +128,8 @@ def create_heat_map(filename):
 def get_heat_map(filename, step_size):
     start_time = time.time()
     crop_radius = 21
-    test_image = cv2.imread(dir.warped + '00005.png')
-    cols = test_image.shape[0]
-    rows = test_image.shape[1]
+    cols = label.output_height
+    rows = label.output_width
     heatmap = np.zeros((int(cols / step_size), int(rows / step_size)), dtype=np.uint8)
     heatmap_rows, heatmap_cols = heatmap.shape
 
@@ -156,8 +155,15 @@ def get_heat_map(filename, step_size):
 
 
 def get_next_image_from_phone():
-    base_dir = '/run/user/1000/gvfs/mtp:host=%5Busb%3A003%2C015%5D/Phone/DCIM/simple_interval_camera/'
-    for root, dirnames, filenames in os.walk(base_dir):
+    # base_dir = '/run/user/1000/gvfs/'
+    # for mtp_dir in os.listdir(base_dir):
+    #     if mtp_dir.startswith('mtp:host'):
+    #         base_dir = base_dir + mtp_dir + '/Phone/DCIM/simple_interval_camera/'
+    #     else:
+    #         print '/run/user/1000/gvfs/mtp:host  not found'
+    #         sys.exit()
+
+    for root, dirnames, filenames in os.walk(dir.capture):
         for filename in filenames:
             if filename.endswith('.jpg'):
                 full_filename = root + '/' + filename
@@ -175,7 +181,13 @@ def infer_from_camera():
     scanner.parse_config('enable')
     loop = True
     heat_map = None
+    background = label.get_background(True)
+
     while loop:
+        cv2.imshow("Background", background)
+        if cv2.waitKey(1) & 0xFF == ord('q'):
+            break
+
         start_time = time.time()
 
         image_to_window = get_next_image_from_phone()
@@ -194,16 +206,17 @@ def infer_from_camera():
 
                 create_lmdb.create_lmdb(warped, dir.train, 0, step_size)
                 subprocess.call(dir.data + 'infer.sh')
-                heat_map = get_heat_map('/home/pkrush/find-parts-faster-data/2/train/0.dat', step_size)
+                heat_map = get_heat_map(dir.train + '0.dat', step_size)
 
         if heat_map != None:
-            cv2.imshow("Heat Map", heat_map)
+            cv2.imshow("Background", heat_map)
             if cv2.waitKey(1) & 0xFF == ord('q'):
                 break
 
         if cv2.waitKey(1) & 0xFF == ord('q'):
             break
         elapsed = time.time() - start_time
+        cv2.waitKey(400)
         if elapsed > .1:
             print 'Done in %s seconds' % (time.time() - start_time,)
 

@@ -116,26 +116,27 @@ def get_background(backlight):
 
 def get_warped(input, scanner):
     global last_symbols
-    gray = cv2.cvtColor(input, cv2.COLOR_BGR2GRAY, dstCn=0)
 
-    pil = Image.fromarray(gray)
-    width, height = pil.size
-    raw = pil.tostring()
+    if last_symbols is None:
+        gray = cv2.cvtColor(input, cv2.COLOR_BGR2GRAY, dstCn=0)
+        pil = Image.fromarray(gray)
+        width, height = pil.size
+        raw = pil.tostring()
 
-    # create a reader
-    image = zbar.Image(width, height, 'Y800', raw)
-    scanner.scan(image)
+        # create a reader
+        image = zbar.Image(width, height, 'Y800', raw)
+        scanner.scan(image)
 
-    # extract results
-    print"                                             for symbol in image:" + str(len(image.symbols))
+        print"                                             for symbol in image:" + str(len(image.symbols))
 
-    if len(image.symbols) != 4:
-        if last_symbols is None:
+        if len(image.symbols) == 4:
+            symbols = image.symbols
+            last_symbols = image.symbols
+        else:
             return None
-        symbols = last_symbols
     else:
-        symbols = image.symbols
-        last_symbols = image.symbols
+        symbols = last_symbols
+
 
     max_src = np.zeros((4, 2), dtype=np.float32)
     max_dst = np.zeros((4, 2), dtype=np.float32)
