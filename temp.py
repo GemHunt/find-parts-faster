@@ -21,7 +21,7 @@ for x in range(0,400000):
     else:
         if key == -1:
             continue
-        cv2.imwrite('/home/pkrush/find-parts-faster-data/screws/4/' + str(count) + '.png',frame)
+        cv2.imwrite('/home/pkrush/find-parts-faster-data/screws/1/' + str(count) + '.png',frame)
         count += 1
         print count
     print 'In %s seconds' % (time.time() - start_time,)

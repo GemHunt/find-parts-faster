@@ -8,26 +8,37 @@ from sklearn.ensemble import RandomForestClassifier, AdaBoostClassifier
 
 
 def get_crop(img):
-    return img[0:1010,270:1640]
+    img = img[0:1010,270:1600]
+    return cv2.resize(img,(1280,972))
 
-def get_contours(small):
-    min_area = 1100
-    max_area = 1500
+def get_thresh(img,flip):
+    cv2.threshold(img, 100, 255, 0, img)
+    if flip:
+        img = 255 - img
+    return img
+
+
+def get_contours(img):
+    min_area = 910
+    max_area = 1240
     size_factor = 1
     #small = cv2.resize(im,(int(1920 *size_factor) ,int(1080 * size_factor)))
-    img = small.copy()
-    cv2.threshold(small,120,255,0,small)
-    small = 255 - small
+    #img = small.copy()
+    thresh = get_thresh(img,True)
 
-    contours, hierarchy = cv2.findContours(small,cv2.RETR_TREE,cv2.CHAIN_APPROX_SIMPLE)
+    contours, hierarchy = cv2.findContours(thresh,cv2.RETR_TREE,cv2.CHAIN_APPROX_SIMPLE)
     filtered_contours = []
     count = 0
     for cnt in contours:
         area = cv2.contourArea(cnt)
-        if min_area * size_factor * size_factor < area < max_area * size_factor * size_factor and hierarchy[0][count][3] == -1:
-            filtered_contours.append(cnt)
+        if hierarchy[0][count][3] == -1:
+            if min_area * size_factor * size_factor < area < max_area * size_factor * size_factor:
+                filtered_contours.append(cnt)
+            #else:
+                #if 800 < area < 2000:
+                    #print area
         count +=1
-    cv2.drawContours(img,filtered_contours,-1,255,1)
+    #cv2.drawContours(img,filtered_contours,-1,255,1)
     #cv2.imshow("Contours",img)
     #cv2.waitKey(0)
     return filtered_contours
@@ -85,8 +96,6 @@ logistic = RandomForestClassifier(max_depth=5, n_estimators=3, max_features=1)
 logistic.fit(all_features,labels)
 count = 0
 
-
-
 print 'Done in %s seconds' % (time.time() - start_time,)
 
 wrong_count = 0
@@ -111,9 +120,13 @@ print wrong_count, len(all_features)
 # is more influential
 #print(np.std(X, 0)*logistic.coef_)
 
+
+#sys.exit()
+
 cap = cv2.VideoCapture(0)
 cap.set(3,1920)
 cap.set(4,1080)
+
 for x in range(0,400000):
     start_time = time.time()
     ret, frame = cap.read()
@@ -122,6 +135,7 @@ for x in range(0,400000):
         continue
     frame = get_crop(frame)
     gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+    thresh = get_thresh(gray,False)
 
     contours = get_contours(gray)
     all_features = get_features(contours)
@@ -139,15 +153,21 @@ for x in range(0,400000):
         #if count > 30:
          #   break
 
-    cv2.drawContours(frame, good_contours, -1, (0,0,255), 1)
-    cv2.drawContours(frame, bad_contours, -1, (0, 255 ,0), 1)
+    background = np.zeros((972, 1280, 3), np.uint8)
+    background[:, :] = (255, 255, 255)
 
-    cv2.imshow('frame', frame)
+    cv2.drawContours(background, good_contours, -1, (150,150,255), -5)
+    cv2.drawContours(background, bad_contours, -1, (150, 255 ,150), -5)
+
+    kernel = np.ones((3, 3), np.uint8)
+    background = cv2.dilate(background, kernel, iterations=1)
+
+    cv2.imshow('background', background)
+    cv2.moveWindow('background', 0, 0)
     key = cv2.waitKey(1)
     if key & 0xFF == ord('q'):
         break
     print 'Done in %s seconds' % (time.time() - start_time,)
-
 
 cap.release()
 cv2.destroyAllWindows()
