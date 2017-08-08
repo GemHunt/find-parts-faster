@@ -18,12 +18,46 @@ from sklearn.discriminant_analysis import QuadraticDiscriminantAnalysis
 
 def get_crop(img):
     img = img[0:1010,270:1600]
-    return cv2.resize(img,(1280,972))
+    img = cv2.resize(img,(1280,972))
+    return img
 
 def get_thresh(img,flip):
     cv2.threshold(img, 100, 255, 0, img)
     if flip:
         img = 255 - img
+    #img = cv2.resize(img, (2540, 1944))
+
+    # noise removal
+    kernel = np.ones((3, 3), np.uint8)
+    opening = cv2.morphologyEx(img, cv2.MORPH_OPEN, kernel, iterations=2)
+    # sure background area
+    sure_bg = cv2.dilate(opening, kernel, iterations=3)
+    # Finding sure foreground area
+    dist_transform = cv2.distanceTransform(opening, cv2.cv.CV_DIST_L2, 5)
+    ret, sure_fg = cv2.threshold(dist_transform, 0.4 * dist_transform.max(), 255,0)
+    # Finding unknown region
+    sure_fg = np.uint8(sure_fg)
+    unknown = cv2.subtract(sure_bg, sure_fg)
+
+    contours, hierarchy = cv2.findContours(sure_fg.copy(), cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
+
+    markers = np.zeros((972,1280), dtype=np.uint8)
+    cv2.drawContours(markers,contours, 0, 255, -1)
+
+    cv2.imshow("img", img)
+    cv2.imshow("opening", opening)
+    cv2.imshow("sure_bg", sure_bg)
+    cv2.imshow("dist_transform", dist_transform)
+    cv2.imshow("unknown", unknown)
+    cv2.imshow("sure_fg", sure_fg)
+    cv2.imshow("markers", markers)
+    key = cv2.waitKey(0)
+    if key & 0xFF == ord('q'):
+        sys.exit()
+
+
+
+
     return img
 
 def get_contours(img):
@@ -51,7 +85,7 @@ def get_contours(img):
             else:
                 if 100 < area:
                     contours_filtered_out.append(cnt)
-                    print area
+                    #print area
 
         count +=1
     #cv2.drawContours(img,filtered_contours,-1,255,1)
@@ -62,62 +96,124 @@ def get_contours(img):
 
 from matplotlib import pyplot as plt
 #Use template matching to break apart contours that watershed can't
+
+def center_rotate(img, angle):
+    rows, cols = img.shape
+    m = cv2.getRotationMatrix2D((cols / 2, rows / 2), angle, 1)
+    cv2.warpAffine(img, m, (cols, rows), img, cv2.INTER_CUBIC)
+    return img
+
+def rotate_bound(image, angle):
+    # grab the dimensions of the image and then determine the
+    # center
+    (h, w) = image.shape[:2]
+    (cX, cY) = (w // 2, h // 2)
+
+    # grab the rotation matrix (applying the negative of the
+    # angle to rotate clockwise), then grab the sine and cosine
+    # (i.e., the rotation components of the matrix)
+    M = cv2.getRotationMatrix2D((cX, cY), -angle, 1.0)
+    cos = np.abs(M[0, 0])
+    sin = np.abs(M[0, 1])
+
+    # compute the new bounding dimensions of the image
+    nW = int((h * sin) + (w * cos))
+    nH = int((h * cos) + (w * sin))
+
+    # adjust the rotation matrix to take into account translation
+    M[0, 2] += (nW / 2) - cX
+    M[1, 2] += (nH / 2) - cY
+
+    # perform the actual rotation and return the image
+    return cv2.warpAffine(image, M, (nW, nH))
+
 def break_contours(contours,frame,template_contour):
-    broken_contours = []
-    max_area = 1800
-    x, y, w, h = cv2.boundingRect(template_contour)
-    template = frame[y:y + h,x:x+w]
     start_time = time.time()
 
+    broken_contours = []
+    max_area = 350
+    rect = cv2.minAreaRect(template_contour)
+    angle = rect[2]
+
+    x, y, template_width, template_height = cv2.boundingRect(template_contour)
+    template_main = frame[y:y + template_height,x:x+template_width]
+    templates = {}
+    for angle in range(0,360,3):
+        template = 255- template_main.copy()
+        template = rotate_bound(template.copy(), angle)
+        template = template * .5 + 127
+        template = np.uint8(template)
+        template = 255 - template
+        templates[angle] = template
+
     for cnt in contours:
-        area = cv2.contourArea(cnt)
-        if area > max_area:
-            x, y, w, h = cv2.boundingRect(cnt)
-            #print w, h
+        max_max_val = 0
+        max_angle = 0
+        max_template = []
+        for angle,template in templates.iteritems():
+            template_height,template_width  = template.shape
 
-            img_to_search = frame[y:y + h, x:x + w]
-            img3 = np.zeros((h+100,w+100), dtype=np.uint8)
-            img3 = img3 + 255
-            img3[50:h+50,50:w+50] = img_to_search
-            img2 = img3.copy()
+            area = cv2.contourArea(cnt)
+            if area > max_area:
+                x, y, img_to_search_width, img_to_search_height = cv2.boundingRect(cnt)
+                img_to_search = frame[y:y + img_to_search_height, x:x + img_to_search_width]
 
-            #img2 = frame.copy()
-            #cv2.imshow('img3', img3)
-            #cv2.imshow('img_to_search', img_to_search)
-            #cv2.imshow('template', template)
-            #cv2.waitKey(1)
+                border = 15
+                img_to_search_width += border + border
+                img_to_search_height += border + border
 
-            w, h = template.shape[::-1]
+                if template_width > img_to_search_width or template_height > img_to_search_height:
+                    continue
 
-            # All the 6 methods for comparison in a list
-            methods = ['cv2.TM_CCOEFF']
+                img3 = np.zeros((img_to_search_height,img_to_search_width), dtype=np.uint8)
+                img3 = img3 + 255
+                img3[border:img_to_search_height-border,border:img_to_search_width-border] = img_to_search
+                img2 = img3.copy()
 
-            for meth in methods:
-                img = img2.copy()
-                method = eval(meth)
+                w, h = template.shape[::-1]
 
-                # Apply template Matching
+                # All the 6 methods for comparison in a list
+                methods = ['cv2.TM_CCOEFF']
 
-                res = cv2.matchTemplate(img, template, method)
+                for meth in methods:
+                    img = img2.copy()
+                    method = eval(meth)
 
-                min_val, max_val, min_loc, max_loc = cv2.minMaxLoc(res)
+                    # Apply template Matching
 
-                # If the method is TM_SQDIFF or TM_SQDIFF_NORMED, take minimum
-                if method in [cv2.TM_SQDIFF, cv2.TM_SQDIFF_NORMED]:
-                    top_left = min_loc
-                else:
-                    top_left = max_loc
-                bottom_right = (top_left[0] + w, top_left[1] + h)
+                    res = cv2.matchTemplate(img, template, method)
 
-                cv2.rectangle(img, top_left, bottom_right, 128, 2)
+                    min_val, max_val, min_loc, max_loc = cv2.minMaxLoc(res)
 
-                #if max_val > 40075832.0:
-                # plt.subplot(121), plt.imshow(res, cmap='gray')
-                # plt.title('Matching Result'), plt.xticks([]), plt.yticks([])
-                # plt.subplot(122), plt.imshow(img, cmap='gray')
-                # plt.title('Detected Point'), plt.xticks([]), plt.yticks([])
-                # plt.suptitle(meth)
-                # plt.show()
+                    # # If the method is TM_SQDIFF or TM_SQDIFF_NORMED, take minimum
+                    # if method in [cv2.TM_SQDIFF, cv2.TM_SQDIFF_NORMED]:
+                    #     top_left = min_loc
+                    # else:
+                    #     top_left = max_loc
+                    # bottom_right = (top_left[0] + w, top_left[1] + h)
+                    #
+                    # cv2.rectangle(img, top_left, bottom_right, 128, 2)
+
+                    if max_max_val < max_val:
+                        max_max_val = max_val
+                        max_angle = angle
+                        max_template = template.copy()
+                    #if max_val > 40075832.0:
+                    # plt.subplot(121), plt.imshow(res, cmap='gray')
+                    # plt.title('Matching Result'), plt.xticks([]), plt.yticks([])
+                    # plt.subplot(122), plt.imshow(img, cmap='gray')
+                    # plt.title('Detected Point'), plt.xticks([]), plt.yticks([])
+                    # plt.suptitle(meth)
+                    # plt.show()
+
+        if max_max_val <> 0:
+            print max_angle,max_max_val
+            # cv2.imshow('max_template', max_template)
+            # cv2.moveWindow('max_template', 1400, 0)
+            # cv2.imshow('img3', img3)
+            # cv2.moveWindow('img3', 1500, 0)
+            # cv2.waitKey(0)
+
     print 'Done in %s seconds' % (time.time() - start_time,)
 
     return broken_contours
@@ -173,8 +269,9 @@ for filename in os.listdir(dir):
 labels = np.zeros(len(contours))
 labels[0:count_of_good_contours] = 1
 
-count = 0
 
+#sys.exit()
+count = 0
 all_features = get_features(contours)
 
 names = ["Nearest Neighbors", "Gaussian Process",
@@ -191,8 +288,6 @@ classifiers = [
     SVC(gamma=2, C=1),
     QuadraticDiscriminantAnalysis(),
     DecisionTreeClassifier(max_depth=5)]
-
-
 
 for name, clf in zip(names, classifiers):
 
@@ -226,7 +321,7 @@ for name, clf in zip(names, classifiers):
 # is more influential
 #print(np.std(X, 0)*logistic.coef_)
 
-#sys.exit()
+sys.exit()
 
 cap = cv2.VideoCapture(0)
 cap.set(3,1920)
