@@ -3,6 +3,7 @@ import numpy as np
 import time
 import sys
 import os
+import water_shed
 from sklearn.linear_model import LogisticRegression
 from sklearn.ensemble import RandomForestClassifier, AdaBoostClassifier
 from sklearn.neural_network import MLPClassifier
@@ -23,7 +24,9 @@ def get_thresh(img,flip):
     cv2.threshold(img, 100, 255, 0, img)
     if flip:
         img = 255 - img
-    #img = cv2.resize(img, (2540, 1944))
+    return img
+
+    #watershed testing:
 
     # noise removal
     kernel = np.ones((3, 3), np.uint8)
@@ -53,45 +56,49 @@ def get_thresh(img,flip):
     if key & 0xFF == ord('q'):
         sys.exit()
 
+def get_contours(dir):
+    for filename in os.listdir(dir):
+        print dir + filename
+        img = cv2.imread(dir + filename, cv2.IMREAD_GRAYSCALE)
+        img = get_crop(img)
 
-    return img
+        # min_area = 910
+        # max_area = 1240
+        # max_area = 1800
 
-def get_contours(img):
-    # min_area = 910
-    # max_area = 1240
-    # max_area = 1800
+        min_area = 210
+        max_area = 330
 
-    min_area = 230
-    max_area = 350
+        size_factor = 1
+        thresh = get_thresh(img,True)
 
-    size_factor = 1
-    #small = cv2.resize(im,(int(1920 *size_factor) ,int(1080 * size_factor)))
-    #img = small.copy()
-    thresh = get_thresh(img,True)
+        contours, hierarchy = cv2.findContours(thresh,cv2.RETR_TREE,cv2.CHAIN_APPROX_SIMPLE)
+        contours_filtered_in = []
+        contours_filtered_out = []
+        count = 0
+        for cnt in contours:
+            area = cv2.contourArea(cnt)
+            if hierarchy[0][count][3] == -1:
+                if min_area * size_factor * size_factor < area < max_area * size_factor * size_factor:
+                    contours_filtered_in.append(cnt)
+                else:
+                    if 100 < area:
+                        contours_filtered_out.append(cnt)
+                        print area
 
-    contours, hierarchy = cv2.findContours(thresh,cv2.RETR_TREE,cv2.CHAIN_APPROX_SIMPLE)
-    contours_filtered_in = []
-    contours_filtered_out = []
-    count = 0
-    for cnt in contours:
-        area = cv2.contourArea(cnt)
-        if hierarchy[0][count][3] == -1:
-            if min_area * size_factor * size_factor < area < max_area * size_factor * size_factor:
-                contours_filtered_in.append(cnt)
-            else:
-                if 100 < area:
-                    contours_filtered_out.append(cnt)
-                    #print area
+            count +=1
 
-        count +=1
-    #cv2.drawContours(img,filtered_contours,-1,255,1)
-    #cv2.imshow("Contours",img)
-    #cv2.waitKey(0)
+        cv2.imshow("Filled_in", img)
+        cv2.waitKey(0)
+        cv2.drawContours(img, contours_filtered_in, -1, 255, -1)
+        #cv2.drawContours(img, contours_filtered_out, -1, 0, -1)
+        cv2.imshow("Filled_in", img)
+        cv2.waitKey(0)
+
+        broken_contours = break_contours(contours_filtered_out,img,contours_filtered_in[0])
+
+
     return contours_filtered_in,contours_filtered_out
-
-
-from matplotlib import pyplot as plt
-#Use template matching to break apart contours that watershed can't
 
 def center_rotate(img, angle):
     rows, cols = img.shape
@@ -153,6 +160,8 @@ def break_contours(contours,frame,template_contour):
             if area > max_area:
                 x, y, img_to_search_width, img_to_search_height = cv2.boundingRect(cnt)
                 img_to_search = frame[y:y + img_to_search_height, x:x + img_to_search_width]
+                water_shed.get_watershed_contours(img_to_search)
+
 
                 border = 15
                 img_to_search_width += border + border
@@ -194,13 +203,6 @@ def break_contours(contours,frame,template_contour):
                         max_max_val = max_val
                         max_angle = angle
                         max_template = template.copy()
-                    #if max_val > 40075832.0:
-                    # plt.subplot(121), plt.imshow(res, cmap='gray')
-                    # plt.title('Matching Result'), plt.xticks([]), plt.yticks([])
-                    # plt.subplot(122), plt.imshow(img, cmap='gray')
-                    # plt.title('Detected Point'), plt.xticks([]), plt.yticks([])
-                    # plt.suptitle(meth)
-                    # plt.show()
 
         if max_max_val <> 0:
             print max_angle,max_max_val
@@ -232,41 +234,21 @@ def get_features(contours):
         hu = cv2.HuMoments(mom)
         hu = hu.flatten()
         features[9:16] = hu
-        # print count, x, y, angle, area, perimeter, ma, MA, bounding_area, hull_defect_count
-        # print hu
-        # This is really slow to get an average mean:
-        # mask = np.zeros(img.shape, np.uint8)
-        # cv2.drawContours(mask, [cnt], 0, 255, -1)
-        # pixelpoints = np.transpose(np.nonzero(mask))
-        # mean_val = cv2.mean(img, mask=mask)
-        # print mean_val
         all_features.append(features)
     return all_features
 
 start_time = time.time()
+
 dir = '/home/pkrush/find-parts-faster-data/screws/2/'
-contours = []
-for filename in os.listdir(dir):
-    print dir + filename
-    im = cv2.imread(dir + filename, cv2.IMREAD_GRAYSCALE)
-    im = get_crop(im)
-    contours_filtered_in, contours_filtered_out = get_contours(im)
-    #I need to create an average one instead? contours_filtered_in[0]
-    #broken_contours= break_contours(contours_filtered_out,im,contours_filtered_in[0])
-    contours.extend(contours_filtered_in)
+contours = list(get_contours(dir))
 count_of_good_contours = len(contours)
 dir = '/home/pkrush/find-parts-faster-data/screws/3/'
-for filename in os.listdir(dir):
-    print dir + filename
-    im = cv2.imread(dir + filename, cv2.IMREAD_GRAYSCALE)
-    im = get_crop(im)
-    contours_filtered_in, contours_filtered_out = get_contours(im)
-    contours.extend(contours_filtered_in)
+contours.extend(get_contours(dir))
 labels = np.zeros(len(contours))
 labels[0:count_of_good_contours] = 1
 
-
 sys.exit()
+
 count = 0
 all_features = get_features(contours)
 
