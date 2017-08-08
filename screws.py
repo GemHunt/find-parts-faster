@@ -14,8 +14,6 @@ from sklearn.tree import DecisionTreeClassifier
 from sklearn.naive_bayes import GaussianNB
 from sklearn.discriminant_analysis import QuadraticDiscriminantAnalysis
 
-
-
 def get_crop(img):
     img = img[0:1010,270:1600]
     img = cv2.resize(img,(1280,972))
@@ -54,8 +52,6 @@ def get_thresh(img,flip):
     key = cv2.waitKey(0)
     if key & 0xFF == ord('q'):
         sys.exit()
-
-
 
 
     return img
@@ -251,17 +247,17 @@ start_time = time.time()
 dir = '/home/pkrush/find-parts-faster-data/screws/2/'
 contours = []
 for filename in os.listdir(dir):
+    print dir + filename
     im = cv2.imread(dir + filename, cv2.IMREAD_GRAYSCALE)
     im = get_crop(im)
     contours_filtered_in, contours_filtered_out = get_contours(im)
-
     #I need to create an average one instead? contours_filtered_in[0]
     #broken_contours= break_contours(contours_filtered_out,im,contours_filtered_in[0])
-
     contours.extend(contours_filtered_in)
 count_of_good_contours = len(contours)
 dir = '/home/pkrush/find-parts-faster-data/screws/3/'
 for filename in os.listdir(dir):
+    print dir + filename
     im = cv2.imread(dir + filename, cv2.IMREAD_GRAYSCALE)
     im = get_crop(im)
     contours_filtered_in, contours_filtered_out = get_contours(im)
@@ -270,7 +266,7 @@ labels = np.zeros(len(contours))
 labels[0:count_of_good_contours] = 1
 
 
-#sys.exit()
+sys.exit()
 count = 0
 all_features = get_features(contours)
 
