@@ -4,6 +4,7 @@ import time
 import sys
 import os
 import water_shed
+import part_image
 from sklearn.linear_model import LogisticRegression
 from sklearn.ensemble import RandomForestClassifier, AdaBoostClassifier
 from sklearn.neural_network import MLPClassifier
@@ -58,7 +59,7 @@ def get_thresh(img,flip):
 
 def get_contours(dir):
     for filename in os.listdir(dir):
-        print dir + filename
+        #print dir + filename
         img = cv2.imread(dir + filename, cv2.IMREAD_GRAYSCALE)
         img = get_crop(img)
 
@@ -84,16 +85,16 @@ def get_contours(dir):
                 else:
                     if 100 < area:
                         contours_filtered_out.append(cnt)
-                        print area
+                        #print area
 
             count +=1
 
-        cv2.imshow("Filled_in", img)
-        cv2.waitKey(0)
+        #cv2.imshow("Filled_in", img)
+        #cv2.waitKey(0)
         cv2.drawContours(img, contours_filtered_in, -1, 255, -1)
         #cv2.drawContours(img, contours_filtered_out, -1, 0, -1)
-        cv2.imshow("Filled_in", img)
-        cv2.waitKey(0)
+        #cv2.imshow("Filled_in", img)
+        #cv2.waitKey(0)
 
         broken_contours = break_contours(contours_filtered_out,img,contours_filtered_in[0])
 
@@ -141,7 +142,7 @@ def break_contours(contours,frame,template_contour):
     x, y, template_width, template_height = cv2.boundingRect(template_contour)
     template_main = frame[y:y + template_height,x:x+template_width]
     templates = {}
-    for angle in range(0,360,3):
+    for angle in range(0,360,360):
         template = 255- template_main.copy()
         template = rotate_bound(template.copy(), angle)
         template = template * .5 + 127
@@ -161,48 +162,24 @@ def break_contours(contours,frame,template_contour):
                 x, y, img_to_search_width, img_to_search_height = cv2.boundingRect(cnt)
                 img_to_search = frame[y:y + img_to_search_height, x:x + img_to_search_width]
                 water_shed.get_watershed_contours(img_to_search)
+                break
 
-
-                border = 15
-                img_to_search_width += border + border
-                img_to_search_height += border + border
-
+                img = part_image.add_border(img_to_search, width=15, color=255)
                 if template_width > img_to_search_width or template_height > img_to_search_height:
                     continue
 
-                img3 = np.zeros((img_to_search_height,img_to_search_width), dtype=np.uint8)
-                img3 = img3 + 255
-                img3[border:img_to_search_height-border,border:img_to_search_width-border] = img_to_search
-                img2 = img3.copy()
+                method = eval('cv2.TM_CCOEFF')
 
-                w, h = template.shape[::-1]
+                res = cv2.matchTemplate(img, template, method)
+                min_val, max_val, min_loc, max_loc = cv2.minMaxLoc(res)
+                top_left = max_loc
+                bottom_right = (top_left[0] + w, top_left[1] + h)
+                # cv2.rectangle(img, top_left, bottom_right, 128, 2)
 
-                # All the 6 methods for comparison in a list
-                methods = ['cv2.TM_CCOEFF']
-
-                for meth in methods:
-                    img = img2.copy()
-                    method = eval(meth)
-
-                    # Apply template Matching
-
-                    res = cv2.matchTemplate(img, template, method)
-
-                    min_val, max_val, min_loc, max_loc = cv2.minMaxLoc(res)
-
-                    # # If the method is TM_SQDIFF or TM_SQDIFF_NORMED, take minimum
-                    # if method in [cv2.TM_SQDIFF, cv2.TM_SQDIFF_NORMED]:
-                    #     top_left = min_loc
-                    # else:
-                    #     top_left = max_loc
-                    # bottom_right = (top_left[0] + w, top_left[1] + h)
-                    #
-                    # cv2.rectangle(img, top_left, bottom_right, 128, 2)
-
-                    if max_max_val < max_val:
-                        max_max_val = max_val
-                        max_angle = angle
-                        max_template = template.copy()
+                if max_max_val < max_val:
+                    max_max_val = max_val
+                    max_angle = angle
+                    max_template = template.copy()
 
         if max_max_val <> 0:
             print max_angle,max_max_val
@@ -212,7 +189,7 @@ def break_contours(contours,frame,template_contour):
             # cv2.moveWindow('img3', 1500, 0)
             # cv2.waitKey(0)
 
-    print 'Done in %s seconds' % (time.time() - start_time,)
+    #print 'Done in %s seconds' % (time.time() - start_time,)
 
     return broken_contours
 
@@ -246,6 +223,7 @@ dir = '/home/pkrush/find-parts-faster-data/screws/3/'
 contours.extend(get_contours(dir))
 labels = np.zeros(len(contours))
 labels[0:count_of_good_contours] = 1
+print 'Done in %s seconds' % (time.time() - start_time,)
 
 sys.exit()
 
