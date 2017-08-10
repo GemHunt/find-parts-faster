@@ -86,17 +86,18 @@ def get_contours(dir):
                 else:
                     if 100 < area:
                         contours_filtered_out.append(cnt)
-
             count +=1
 
-        cv2.drawContours(img, contours_filtered_in, -1, 255, -1)
-        broken_contours = break_contours(contours_filtered_out,img,contours_filtered_in[0])
+        broken_contours = break_contours(contours_filtered_out,contours_filtered_in,img,contours_filtered_in[0])
         #todo contours_filtered_out will need to be redone, or there will be none.
     return contours_filtered_in,contours_filtered_out
 
 
-def break_contours(contours,frame,template_contour):
+def break_contours(contours,contours_filtered_in, img,template_contour):
     broken_contours = []
+
+    templates = template_match.get_templates(img,template_contour)
+    cv2.drawContours(img, contours_filtered_in, -1, 255, -1)
 
     for cnt in contours:
         area = cv2.contourArea(cnt)
@@ -104,7 +105,7 @@ def break_contours(contours,frame,template_contour):
             continue
 
         x, y, img_to_search_width, img_to_search_height = cv2.boundingRect(cnt)
-        img_to_search = frame[y:y + img_to_search_height, x:x + img_to_search_width]
+        img_to_search = img[y:y + img_to_search_height, x:x + img_to_search_width]
         img_to_search = img_to_search.copy()
 
         thresholds = [.1,.2,.3]
@@ -121,12 +122,7 @@ def break_contours(contours,frame,template_contour):
         if not contours_still_left:
             continue
 
-        template = template_contour
-        #broken_contours.extend(template_match.break_contours(local_thresh,max_area,template))
-
-
-
-
+        broken_contours.extend(template_match.break_contours(local_thresh,max_area,templates))
 
     # cv2.imshow('frame', frame)
     # key = cv2.waitKey(0)
