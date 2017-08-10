@@ -10,18 +10,20 @@ from skimage.filters import rank
 import part_image
 
 
-def get_watershed_contours(img):
+def get_watershed_contours(img_to_search,min_area,max_area,threshold_dist, global_x,global_y):
     start_time = time.time()
-    # noise removal
+    watershed_contours = []
 
-    img = 255 - img.copy()
+    img = part_image.add_border(img_to_search.copy(),1,255)
+
+    img = 255 - img
     kernel = np.ones((3, 3), np.uint8)
     opening = cv2.morphologyEx(img, cv2.MORPH_OPEN, kernel, iterations=2)
     # sure background area
     sure_bg = cv2.dilate(opening, kernel, iterations=3)
     # Finding sure foreground area
     dist_transform = cv2.distanceTransform(opening, cv2.cv.CV_DIST_L2, 5)
-    ret, sure_fg = cv2.threshold(dist_transform, 0.2 * dist_transform.max(), 255, 0)
+    ret, sure_fg = cv2.threshold(dist_transform, threshold_dist * dist_transform.max(), 255, 0)
     # Finding unknown region
     # sure_fg = np.uint8(sure_fg)
 
@@ -37,7 +39,6 @@ def get_watershed_contours(img):
     #print 'Done in %s seconds' % (time.time() - start_time,)
 
     markers = np.uint8(markers)
-    #labels = part_image.add_border(labels,1,0)
 
     for label in np.unique(labels):
         # if the label is zero, we are examining the 'background'
@@ -69,11 +70,10 @@ def get_watershed_contours(img):
                #print
 
             area = cv2.contourArea(c)
-            min_area = 210
-            max_area = 330
 
             if min_area < area < max_area:
                 print label, ' contour length,area:', len(c),area
+                watershed_contours.append(c)
 
             # draw a circle enclosing the object
             #((x, y), r) = cv2.minEnclosingCircle(c)
@@ -81,8 +81,7 @@ def get_watershed_contours(img):
             #cv2.putText(img, "#{}".format(label), (int(x) - 10, int(y)),cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 0, 255), 2)
 
 
-
-    #cv2.imshow("sure_fg", sure_fg)
+    #cv2.imshow("img", img)
     #cv2.imshow("opening", opening)
     #cv2.imshow("markers", markers)
     #cv2.imshow("gradient", gradient)
@@ -111,8 +110,23 @@ def get_watershed_contours(img):
     #
     # fig.tight_layout()
     # plt.show()
-    # key = cv2.waitKey(0)
-    # if key & 0xFF == ord('q'):
-    #     sys.exit()
+    #key = cv2.waitKey(0)
+    #if key & 0xFF == ord('q'):
+        #sys.exit()
 
-    return labels
+    for watershed_contour in watershed_contours:
+        for pt in watershed_contour:
+            # 1 is subtracked because a 1 pixel boarder was added
+            pt[0, 0] -= 1
+            pt[0, 1] -= 1
+
+    # Take out the contours found with watershed:
+    cv2.drawContours(img_to_search, watershed_contours, -1, 255, -1)
+
+    for watershed_contour in watershed_contours:
+        for pt in watershed_contour:
+            # 1 is subtracked because a 1 pixel boarder was added
+            pt[0, 0] += global_x
+            pt[0, 1] += global_y
+
+    return watershed_contours

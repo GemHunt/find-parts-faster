@@ -4,6 +4,7 @@ import time
 import sys
 import os
 import water_shed
+import template_match
 import part_image
 from sklearn.linear_model import LogisticRegression
 from sklearn.ensemble import RandomForestClassifier, AdaBoostClassifier
@@ -15,6 +16,13 @@ from sklearn.gaussian_process.kernels import RBF
 from sklearn.tree import DecisionTreeClassifier
 from sklearn.naive_bayes import GaussianNB
 from sklearn.discriminant_analysis import QuadraticDiscriminantAnalysis
+
+# min_area = 910
+# max_area = 1240
+
+min_area = 210
+max_area = 330
+
 
 def get_crop(img):
     img = img[0:1010,270:1600]
@@ -63,13 +71,6 @@ def get_contours(dir):
         img = cv2.imread(dir + filename, cv2.IMREAD_GRAYSCALE)
         img = get_crop(img)
 
-        # min_area = 910
-        # max_area = 1240
-        # max_area = 1800
-
-        min_area = 210
-        max_area = 330
-
         size_factor = 1
         thresh = get_thresh(img,True)
 
@@ -85,21 +86,59 @@ def get_contours(dir):
                 else:
                     if 100 < area:
                         contours_filtered_out.append(cnt)
-                        #print area
 
             count +=1
 
-        #cv2.imshow("Filled_in", img)
-        #cv2.waitKey(0)
         cv2.drawContours(img, contours_filtered_in, -1, 255, -1)
-        #cv2.drawContours(img, contours_filtered_out, -1, 0, -1)
-        #cv2.imshow("Filled_in", img)
-        #cv2.waitKey(0)
-
         broken_contours = break_contours(contours_filtered_out,img,contours_filtered_in[0])
-
-
+        #todo contours_filtered_out will need to be redone, or there will be none.
     return contours_filtered_in,contours_filtered_out
+
+
+def break_contours(contours,frame,template_contour):
+    broken_contours = []
+
+    for cnt in contours:
+        area = cv2.contourArea(cnt)
+        if area < max_area:
+            continue
+
+        x, y, img_to_search_width, img_to_search_height = cv2.boundingRect(cnt)
+        img_to_search = frame[y:y + img_to_search_height, x:x + img_to_search_width]
+        img_to_search = img_to_search.copy()
+
+        thresholds = [.1,.2,.3]
+        for threshold_dist in thresholds:
+            broken_contours.extend(water_shed.get_watershed_contours(img_to_search, min_area, max_area,threshold_dist,x,y))
+        local_thresh = img_to_search.copy()
+        local_thresh = 255 - local_thresh
+        local_contours, hierarchy = cv2.findContours(local_thresh, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
+        contours_still_left = False
+        for local_cnt in local_contours:
+            #print cv2.contourArea(local_cnt)
+            if min_area < cv2.contourArea(local_cnt):
+                contours_still_left = True
+        if not contours_still_left:
+            continue
+
+        template = template_contour
+        #broken_contours.extend(template_match.break_contours(local_thresh,max_area,template))
+
+
+
+
+
+    # cv2.imshow('frame', frame)
+    # key = cv2.waitKey(0)
+    # if key & 0xFF == ord('q'):
+    #     sys.exit()
+    # cv2.drawContours(frame, broken_contours, -1, 255, -1)
+    # cv2.imshow('frame', frame)
+    # key =  cv2.waitKey(0)
+    # if key & 0xFF == ord('q'):
+    #     sys.exit()
+    return broken_contours
+
 
 def center_rotate(img, angle):
     rows, cols = img.shape
@@ -107,91 +146,7 @@ def center_rotate(img, angle):
     cv2.warpAffine(img, m, (cols, rows), img, cv2.INTER_CUBIC)
     return img
 
-def rotate_bound(image, angle):
-    # grab the dimensions of the image and then determine the
-    # center
-    (h, w) = image.shape[:2]
-    (cX, cY) = (w // 2, h // 2)
 
-    # grab the rotation matrix (applying the negative of the
-    # angle to rotate clockwise), then grab the sine and cosine
-    # (i.e., the rotation components of the matrix)
-    M = cv2.getRotationMatrix2D((cX, cY), -angle, 1.0)
-    cos = np.abs(M[0, 0])
-    sin = np.abs(M[0, 1])
-
-    # compute the new bounding dimensions of the image
-    nW = int((h * sin) + (w * cos))
-    nH = int((h * cos) + (w * sin))
-
-    # adjust the rotation matrix to take into account translation
-    M[0, 2] += (nW / 2) - cX
-    M[1, 2] += (nH / 2) - cY
-
-    # perform the actual rotation and return the image
-    return cv2.warpAffine(image, M, (nW, nH))
-
-def break_contours(contours,frame,template_contour):
-    start_time = time.time()
-
-    broken_contours = []
-    max_area = 350
-    rect = cv2.minAreaRect(template_contour)
-    angle = rect[2]
-
-    x, y, template_width, template_height = cv2.boundingRect(template_contour)
-    template_main = frame[y:y + template_height,x:x+template_width]
-    templates = {}
-    for angle in range(0,360,360):
-        template = 255- template_main.copy()
-        template = rotate_bound(template.copy(), angle)
-        template = template * .5 + 127
-        template = np.uint8(template)
-        template = 255 - template
-        templates[angle] = template
-
-    for cnt in contours:
-        max_max_val = 0
-        max_angle = 0
-        max_template = []
-        for angle,template in templates.iteritems():
-            template_height,template_width  = template.shape
-
-            area = cv2.contourArea(cnt)
-            if area > max_area:
-                x, y, img_to_search_width, img_to_search_height = cv2.boundingRect(cnt)
-                img_to_search = frame[y:y + img_to_search_height, x:x + img_to_search_width]
-                water_shed.get_watershed_contours(img_to_search)
-                break
-
-                img = part_image.add_border(img_to_search, width=15, color=255)
-                if template_width > img_to_search_width or template_height > img_to_search_height:
-                    continue
-
-                method = eval('cv2.TM_CCOEFF')
-
-                res = cv2.matchTemplate(img, template, method)
-                min_val, max_val, min_loc, max_loc = cv2.minMaxLoc(res)
-                top_left = max_loc
-                bottom_right = (top_left[0] + w, top_left[1] + h)
-                # cv2.rectangle(img, top_left, bottom_right, 128, 2)
-
-                if max_max_val < max_val:
-                    max_max_val = max_val
-                    max_angle = angle
-                    max_template = template.copy()
-
-        if max_max_val <> 0:
-            print max_angle,max_max_val
-            # cv2.imshow('max_template', max_template)
-            # cv2.moveWindow('max_template', 1400, 0)
-            # cv2.imshow('img3', img3)
-            # cv2.moveWindow('img3', 1500, 0)
-            # cv2.waitKey(0)
-
-    #print 'Done in %s seconds' % (time.time() - start_time,)
-
-    return broken_contours
 
 def get_features(contours):
     all_features = []
