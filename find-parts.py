@@ -4,6 +4,7 @@ import time
 import sys
 import os
 import water_shed
+import water_shed2
 import template_match
 import part_image
 from sklearn.linear_model import LogisticRegression
@@ -30,42 +31,15 @@ def get_crop(img):
     return img
 
 def get_thresh(img,flip):
-    cv2.threshold(img, 100, 255, 0, img)
+    cv2.threshold(img, 90, 255, 0, img)
     if flip:
         img = 255 - img
     return img
 
-    #watershed testing:
-
-    # noise removal
-    kernel = np.ones((3, 3), np.uint8)
-    opening = cv2.morphologyEx(img, cv2.MORPH_OPEN, kernel, iterations=2)
-    # sure background area
-    sure_bg = cv2.dilate(opening, kernel, iterations=3)
-    # Finding sure foreground area
-    dist_transform = cv2.distanceTransform(opening, cv2.cv.CV_DIST_L2, 5)
-    ret, sure_fg = cv2.threshold(dist_transform, 0.4 * dist_transform.max(), 255,0)
-    # Finding unknown region
-    sure_fg = np.uint8(sure_fg)
-    unknown = cv2.subtract(sure_bg, sure_fg)
-
-    contours, hierarchy = cv2.findContours(sure_fg.copy(), cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
-
-    markers = np.zeros((972,1280), dtype=np.uint8)
-    cv2.drawContours(markers,contours, 0, 255, -1)
-
-    cv2.imshow("img", img)
-    cv2.imshow("opening", opening)
-    cv2.imshow("sure_bg", sure_bg)
-    cv2.imshow("dist_transform", dist_transform)
-    cv2.imshow("unknown", unknown)
-    cv2.imshow("sure_fg", sure_fg)
-    cv2.imshow("markers", markers)
-    key = cv2.waitKey(0)
-    if key & 0xFF == ord('q'):
-        sys.exit()
-
 def get_contours(dir):
+    contours_filtered_in = []
+    contours_filtered_out = []
+
     for filename in os.listdir(dir):
         #print dir + filename
         img = cv2.imread(dir + filename, cv2.IMREAD_GRAYSCALE)
@@ -75,8 +49,6 @@ def get_contours(dir):
         thresh = get_thresh(img,True)
 
         contours, hierarchy = cv2.findContours(thresh,cv2.RETR_TREE,cv2.CHAIN_APPROX_SIMPLE)
-        contours_filtered_in = []
-        contours_filtered_out = []
         count = 0
         for cnt in contours:
             area = cv2.contourArea(cnt)
@@ -88,15 +60,14 @@ def get_contours(dir):
                         contours_filtered_out.append(cnt)
             count +=1
 
-        broken_contours = break_contours(contours_filtered_out,contours_filtered_in,img,contours_filtered_in[0])
-        #todo contours_filtered_out will need to be redone, or there will be none.
-    return contours_filtered_in,contours_filtered_out
-
+        #broken_contours = break_contours(contours_filtered_out,contours_filtered_in,img,contours_filtered_in[0])
+        #contours_filtered_in.extend(broken_contours)
+    return contours_filtered_in
 
 def break_contours(contours,contours_filtered_in, img,template_contour):
     broken_contours = []
 
-    templates = template_match.get_templates(img,template_contour)
+    #templates = template_match.get_templates(img,template_contour)
     cv2.drawContours(img, contours_filtered_in, -1, 255, -1)
 
     for cnt in contours:
@@ -108,12 +79,15 @@ def break_contours(contours,contours_filtered_in, img,template_contour):
         img_to_search = img[y:y + img_to_search_height, x:x + img_to_search_width]
         img_to_search = img_to_search.copy()
 
-        thresholds = [.1,.2,.3]
+        thresholds = [.1,.2,.3,.4,.5]
         for threshold_dist in thresholds:
             broken_contours.extend(water_shed.get_watershed_contours(img_to_search, min_area, max_area,threshold_dist,x,y))
+
+        #water_shed2.get_watershed_contours(img_to_search, min_area, max_area,.3,x,y)
+
         local_thresh = img_to_search.copy()
         local_thresh = 255 - local_thresh
-        local_contours, hierarchy = cv2.findContours(local_thresh, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
+        local_contours, hierarchy = cv2.findContours(local_thresh.copy(), cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
         contours_still_left = False
         for local_cnt in local_contours:
             #print cv2.contourArea(local_cnt)
@@ -122,7 +96,7 @@ def break_contours(contours,contours_filtered_in, img,template_contour):
         if not contours_still_left:
             continue
 
-        broken_contours.extend(template_match.break_contours(local_thresh,max_area,templates))
+        #broken_contours.extend(template_match.break_contours(local_thresh,max_area,templates))
 
     # cv2.imshow('frame', frame)
     # key = cv2.waitKey(0)
@@ -176,22 +150,27 @@ labels = np.zeros(len(contours))
 labels[0:count_of_good_contours] = 1
 print 'Done in %s seconds' % (time.time() - start_time,)
 
-sys.exit()
 
 count = 0
 all_features = get_features(contours)
 
-names = ["Nearest Neighbors", "Gaussian Process",
-         "Random Forest", "Neural Net", "AdaBoost",
-         "Naive Bayes","RBF SVM","QDA","Decision Tree"]
+names = ["Nearest Neighbors",
+         #"Gaussian Process",
+         #"Random Forest",
+         #"Neural Net",
+         "AdaBoost",
+         #"Naive Bayes",
+         "RBF SVM",
+         "QDA",
+         "Decision Tree"]
 
 classifiers = [
     KNeighborsClassifier(3),
-    GaussianProcessClassifier(1.0 * RBF(1.0), warm_start=True),
-    RandomForestClassifier(max_depth=5, n_estimators=10, max_features=1),
-    MLPClassifier(alpha=1),
+    #GaussianProcessClassifier(1.0 * RBF(1.0), warm_start=True),
+    #RandomForestClassifier(max_depth=5, n_estimators=10, max_features=1),
+    #MLPClassifier(alpha=1),
     AdaBoostClassifier(),
-    GaussianNB(),
+    #GaussianNB(),
     SVC(gamma=2, C=1),
     QuadraticDiscriminantAnalysis(),
     DecisionTreeClassifier(max_depth=5)]
