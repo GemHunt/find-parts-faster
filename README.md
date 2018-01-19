@@ -42,7 +42,7 @@ Search speed will depend on the rareness of the parts and visual difference. A g
 * It will find parts and areas of parts that just don’t match as well(for whatever reason) 
 * Internal thread ID
 
-**Notes: 
+**Notes:**
 * It’s not a precise measuring system
 
 **How does this work:**
@@ -50,7 +50,6 @@ Search speed will depend on the rareness of the parts and visual difference. A g
 * See Repos:
 * Lighting: [lighting-augmentation repo](https://github.com/GemHunt/lighting-augmentation)
 * SAIL: Unsupervised Labeling: [sail repo](https://github.com/GemHunt/sail)
-
 
 **First proof of concept history:**
 * I build the first version in summer 2017
