@@ -44,6 +44,7 @@ Search speed will depend on the rareness of the parts and visual difference. A g
 
 **Notes:**
 * It’s not a precise measuring system
+* The system is intended to stand on it's own without robotics
 
 **How does this work:**
 * It uses deep learning a ton of lighting and camera angle augmention
